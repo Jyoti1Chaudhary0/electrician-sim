@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Electrician Practical Sim — Series Circuit Practical</title>
+<style>
+:root{--bg:#14181c;--panel:#1d2329;--line:#2c343c;--ink:#ecf0f3;--dim:#8b98a4;--yellow:#f2b705;--blue:#4fb3d8;--red:#e15a4d;--green:#4fbf7a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f4f2ee;--panel:#fff;--line:#dcd7cd;--ink:#1c1f22;--dim:#666}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+header{padding:16px 14px 10px;border-bottom:2px solid var(--yellow);display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{margin:0;font-size:1.05rem}
+#timer{font-size:1.2rem;color:var(--yellow)}#timer.low{color:var(--red)}
+.wrap{max-width:800px;margin:0 auto;padding:12px 12px 60px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:14px}
+.card h2{margin:0 0 8px;font-size:.95rem}
+.dim{color:var(--dim);font-size:.82rem;line-height:1.55}
+button{font-family:inherit;cursor:pointer;border-radius:5px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:11px 14px;font-size:.85rem;min-height:44px}
+button.pri{background:var(--yellow);color:#14181c;border-color:var(--yellow);font-weight:700}
+button:disabled{opacity:.35;cursor:not-allowed}
+.locked{opacity:.4;pointer-events:none}
+.safety label{display:flex;gap:10px;align-items:center;font-size:.88rem;margin:8px 0}
+.safety input{accent-color:var(--yellow);width:20px;height:20px}
+.tray{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.ti{border:1px solid var(--line);border-radius:5px;padding:10px;text-align:center;flex:1 1 70px;font-size:.76rem;background:var(--bg);cursor:pointer}
+.ti .ic{font-size:1.2rem;display:block}.ti.sel{border-color:var(--yellow);box-shadow:0 0 0 1px var(--yellow)}.ti.pl{opacity:.35}
+svg{width:100%;height:auto;display:block;background:#0e1216;border-radius:6px;border:1px solid var(--line);touch-action:manipulation}
+.term{fill:#556;stroke:var(--dim);cursor:pointer}.term.pick{fill:var(--yellow)}.term.used{fill:var(--green)}.term.bad{fill:var(--red)}
+.cl{stroke:var(--blue);stroke-width:6;stroke-linecap:round}.cl.sup{stroke:var(--yellow)}
+.hint{font-size:.8rem;color:var(--dim);margin:6px 0}.hint.a{color:var(--yellow)}
+.mist{margin:6px 0;padding:8px 10px;border-left:3px solid var(--red);background:rgba(225,90,77,.08);font-size:.82rem}
+.okmsg{margin:6px 0;padding:8px 10px;border-left:3px solid var(--green);background:rgba(79,191,122,.08);font-size:.82rem}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+input[type=number],select{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:10px;width:120px;font-size:.9rem}
+.meter{font-size:1.5rem;color:var(--blue);margin:6px 0}
+.opt{display:block;width:100%;text-align:left;margin-bottom:6px}
+table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
+.big{font-size:2rem;color:var(--yellow)}
+</style></head>
+<body>
+<header><h1>⚡ Series Circuit Practical <span class="dim">· DGT Electrician</span></h1><div id="timer" class="mono">15:00</div></header>
+<div class="wrap">
+
+<div class="card" id="cStart">
+<h2>Task</h2>
+<p class="dim">Wire a series circuit using a 12V supply, R1 (100Ω), R2 (220Ω), R3 (330Ω). Then power on safely, measure loop current and the voltage across R2, and analyse the effect of an open resistor. You have 15 minutes. Marks: Build 40 · Safety and meter use 20 · Measurement 40.</p>
+<button class="pri" id="bStart">Start task</button>
+</div>
+
+<div class="card locked" id="cSafe">
+<h2>1 · Safety checklist</h2>
+<div class="safety">
+<label><input type="checkbox" class="sf"> Supply switched OFF before making connections</label>
+<label><input type="checkbox" class="sf"> Multimeter set to correct range/function</label>
+<label><input type="checkbox" class="sf"> No loose or exposed live connections</label></div>
+</div>
+
+<div class="card locked" id="cBoard">
+<h2>2 · Build the circuit</h2>
+<div class="tray" id="tray"></div>
+<div class="hint" id="hint"></div>
+<svg id="board" viewBox="0 0 640 220"></svg>
+<div id="live"></div>
+<div class="row"><button id="bClear">Clear board</button><button class="pri" id="bPower" disabled>Power ON</button></div>
+</div>
+
+<div class="card locked" id="cMeas">
+<h2>3 · Measure</h2>
+<p class="dim">Supply is ON. Take readings, then record them.</p>
+<div class="row"><label class="dim">Meter function<br><select id="fn"><option value="">— select —</option><option value="DCV">DC voltage (V⎓)</option><option value="ACV">AC voltage (V~)</option><option value="DCA">DC current (mA)</option><option value="OHM">Resistance (Ω)</option></select></label></div>
+<div class="row"><select id="probe"><option value="loop">Loop current</option><option value="R1">Across R1</option><option value="R2">Across R2</option><option value="R3">Across R3</option></select><button id="bMeas">Measure</button></div>
+<div class="meter mono" id="meter">—</div>
+<div class="row"><label class="dim">Current (mA)<br><input type="number" step="0.01" id="inI"></label><label class="dim">V across R2 (V)<br><input type="number" step="0.01" id="inV"></label></div>
+<div class="row"><button class="pri" id="bRec">Record readings</button></div>
+<div id="measMsg"></div>
+</div>
+
+<div class="card locked" id="cFault">
+<h2>4 · Fault analysis</h2>
+<p class="dim">R2 now develops an open circuit. What does the voltmeter across R2 read?</p>
+<div id="fopts"></div>
+</div>
+
+<div class="card" id="cRes" style="display:none">
+<h2>Result</h2><div class="big mono" id="total"></div><p class="dim" id="tused"></p>
+<table id="tbl"></table>
+<h2 style="margin-top:14px">Mistakes</h2><div id="mlog"></div>
+<div class="row"><button class="pri" id="bRetry">Retry</button></div>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const PARTS=[{id:'supply',l:'12V Supply',ic:'🔋'},{id:'R1',l:'R1 100Ω',ic:'▭'},{id:'R2',l:'R2 220Ω',ic:'▭'},{id:'R3',l:'R3 330Ω',ic:'▭'}];
+const NODES=[{id:'F',x:80,y:50},{id:'A',x:80,y:170},{id:'B',x:400,y:170},{id:'C',x:400,y:50},{id:'D',x:560,y:170},{id:'E',x:560,y:50}];
+const I_OK=12/650*1000, V2_OK=12/650*220;
+const LIMIT=900;
+let builtOk,placed,sel,pick,mist,score,phase,timeLeft,tick,badNodes;
+
+function reset(){
+  builtOk=false;placed={};sel=null;pick=null;mist={};badNodes=[];phase='start';timeLeft=LIMIT;
+  score={build:40,safety:20,meas:40,i:0,v:0,f:0};
+  clearInterval(tick);
+  $('cStart').style.display='block';$('cRes').style.display='none';
+  ['cSafe','cBoard','cMeas','cFault'].forEach(i=>$(i).classList.add('locked'));
+  document.querySelectorAll('.sf').forEach(c=>c.checked=false);
+  $('bPower').disabled=true;$('live').innerHTML='';$('meter').textContent='—';
+  $('measMsg').innerHTML='';$('inI').value='';$('inV').value='';$('fopts').innerHTML='';
+  showTimer();renderTray();draw();hint();
+}
+function showTimer(){const m=Math.floor(timeLeft/60),s=timeLeft%60;$('timer').textContent=m+':'+String(s).padStart(2,'0');$('timer').className='mono'+(timeLeft<120?' low':'')}
+$('bStart').onclick=()=>{
+  $('cStart').style.display='none';$('cSafe').classList.remove('locked');phase='safety';
+  tick=setInterval(()=>{timeLeft--;showTimer();if(timeLeft<=0){clearInterval(tick);finish(true)}},1000);
+};
+document.querySelectorAll('.sf').forEach(c=>c.onchange=()=>{
+  if([...document.querySelectorAll('.sf')].every(x=>x.checked)&&phase==='safety'){phase='build';$('cBoard').classList.remove('locked')}
+});
+
+function addMist(code,cat,pts,msg){
+  if(mist[code])return;mist[code]={cat,pts,msg};score[cat]=Math.max(0,score[cat]-pts);
+}
+function renderTray(){
+  $('tray').innerHTML=PARTS.map(p=>`<div class="ti ${sel===p.id?'sel':''} ${placed[p.id]?'pl':''}" data-p="${p.id}"><span class="ic">${p.ic}</span>${p.l}</div>`).join('');
+  $('tray').querySelectorAll('.ti').forEach(e=>e.onclick=()=>{
+    const id=e.dataset.p;
+    if(placed[id]){delete placed[id];after()}else{sel=sel===id?null:id;pick=null;renderTray();draw();hint()}
+  });
+}
+function hint(){
+  const h=$('hint');
+  if(!sel){h.textContent='Tap a component, then tap two terminals to place it.';h.className='hint'}
+  else if(!pick){h.textContent=sel+': tap the first terminal.';h.className='hint a'}
+  else{h.textContent=sel+': tap the second terminal.';h.className='hint a'}
+}
+function draw(){
+  let h=`<rect x="8" y="8" width="624" height="204" rx="8" fill="none" stroke="#2c343c"/>`;
+  const seen={};
+  Object.entries(placed).forEach(([p,t])=>{
+    let a=NODES.find(n=>n.id===t.a),b=NODES.find(n=>n.id===t.b);
+    if(a.x>b.x||(a.x===b.x&&a.y>b.y))[a,b]=[b,a];
+    const key=a.id+b.id;const idx=seen[key]=(seen[key]??-1)+1;
+    const dup=Object.values(placed).filter(q=>(q.a===a.id&&q.b===b.id)||(q.a===b.id&&q.b===a.id)).length>1;
+    const off=dup?(idx?9:-9):0;
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len;
+    const x1=a.x+nx*off,y1=a.y+ny*off,x2=b.x+nx*off,y2=b.y+ny*off;
+    const side=dup&&idx?1:-1,d=dup?22:18;
+    const lx=(a.x+b.x)/2+nx*(off+side*d),ly=(a.y+b.y)/2+ny*(off+side*d)+4;
+    h+=`<line class="cl ${p==='supply'?'sup':''}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><text x="${lx}" y="${ly}" fill="#ecf0f3" font-size="14" text-anchor="middle" font-family="monospace">${p==='supply'?'12V':p}</text>`;
+  });
+  NODES.forEach(n=>{
+    const used=Object.values(placed).some(t=>t.a===n.id||t.b===n.id);
+    const c=badNodes.includes(n.id)?'bad':pick===n.id?'pick':used?'used':'';
+    h+=`<circle class="term ${c}" cx="${n.x}" cy="${n.y}" r="17" data-n="${n.id}"/><text x="${n.x+(n.x<300?-28:26)}" y="${n.y+5}" fill="#8b98a4" font-size="14" text-anchor="middle">${n.id}</text>`;
+  });
+  $('board').innerHTML=h;
+  $('board').querySelectorAll('.term').forEach(c=>c.onclick=()=>tap(c.dataset.n));
+}
+function tap(n){
+  if(!sel)return;
+  if(!pick){pick=n;hint();draw();return}
+  if(pick===n){pick=null;hint();draw();return}
+  placed[sel]={a:pick,b:n};sel=null;pick=null;after();
+}
+function analyse(){
+  const es=Object.entries(placed).map(([p,t])=>({p,a:t.a,b:t.b}));
+  const deg={};es.forEach(e=>{deg[e.a]=(deg[e.a]||0)+1;deg[e.b]=(deg[e.b]||0)+1});
+  const res={par:[],junc:[],dang:[],ok:false};
+  for(let i=0;i<es.length;i++)for(let j=i+1;j<es.length;j++){
+    const x=es[i],y=es[j];
+    if((x.a===y.a&&x.b===y.b)||(x.a===y.b&&x.b===y.a))res.par.push([x.p,y.p]);
+  }
+  Object.entries(deg).forEach(([n,d])=>{if(d>2)res.junc.push(n);if(d===1)res.dang.push(n)});
+  if(es.length===4&&!res.par.length&&!res.junc.length&&!res.dang.length){
+    const seen=new Set([es[0].a]);let ch=true;
+    while(ch){ch=false;es.forEach(e=>{if(seen.has(e.a)&&!seen.has(e.b)){seen.add(e.b);ch=true}if(seen.has(e.b)&&!seen.has(e.a)){seen.add(e.a);ch=true}})}
+    res.ok=seen.size===Object.keys(deg).length;
+  }
+  return res;
+}
+function after(){
+  const r=analyse();badNodes=[];let html='';
+  r.par.forEach(p=>{html+=`<div class="mist">${p[0]} and ${p[1]} are wired across the same two terminals — that is a parallel connection, not series.</div>`;addMist('par','build',15,'Parallel connection made where series was required')});
+  (r.par.length?[]:r.junc).forEach(n=>{badNodes.push(n);html+=`<div class="mist">Terminal ${n} has more than two leads — that is a junction (parallel), not a series joint.</div>`;addMist('junc','build',15,'Three or more leads joined at one terminal')});
+  if(Object.keys(placed).length===4){
+    if(r.dang.length){r.dang.forEach(n=>badNodes.push(n));html+=`<div class="mist">Terminal ${r.dang.join(', ')} has only one lead — open circuit, no current path.</div>`}
+    if(r.ok)html+=`<div class="okmsg">✔ Correct series loop: supply, R1, R2, R3 in one closed path.</div>`;
+  }
+  $('live').innerHTML=html;
+  $('bPower').disabled=Object.keys(placed).length<4;
+  renderTray();draw();hint();
+}
+$('bClear').onclick=()=>{placed={};sel=null;pick=null;after()};
+
+$('bPower').onclick=()=>{
+  const r=analyse();
+  if(!r.ok){
+    addMist('unsafe','safety',10,'Powered on a circuit that was not a complete, correct series loop');
+    if(r.dang.length)addMist('open','build',10,'Left a dangling terminal (open circuit)');
+    $('live').innerHTML+=`<div class="mist">⚠ Safety error: you energised an incorrect circuit. Fix the wiring before switching ON.</div>`;
+    return;
+  }
+  builtOk=true;phase='measure';$('cBoard').classList.add('locked');$('cMeas').classList.remove('locked');
+};
+$('bMeas').onclick=()=>{
+  const p=$('probe').value,fn=$('fn').value,m=$('meter');
+  const val=p==='loop'?I_OK.toFixed(2)+' mA':(12/650*({R1:100,R2:220,R3:330}[p])).toFixed(2)+' V';
+  let msg='';
+  if(!fn){m.textContent='Select a meter function first';return}
+  const need=p==='loop'?'DCA':'DCV';
+  if(fn===need){m.textContent=val;return}
+  if(fn==='ACV'){m.textContent='0.00 V';msg='The supply is DC. AC mode reads zero.';addMist('ac','safety',5,'Meter left on AC voltage for a DC supply')}
+  else if(fn==='OHM'){m.textContent='ERR';msg='Never use resistance mode on a live circuit; it can damage the meter.';addMist('ohm','safety',10,'Used resistance mode on a live circuit')}
+  else if(fn==='DCA'){m.textContent='ERR';msg='Current mode across a component acts like a short circuit. Use voltage mode across parts; current mode goes in series.';addMist('amp','safety',10,'Connected the ammeter (current mode) across a component')}
+  else if(fn==='DCV'){m.textContent='0.00 mA';msg='A voltmeter goes across a component, not in the loop. To read current, use DC current mode in series.';addMist('vs','safety',5,'Used voltage mode to measure loop current')}
+  $('measMsg').innerHTML='<div class="mist">'+msg+'</div>';
+};
+$('bRec').onclick=()=>{
+  const i=parseFloat($('inI').value),v=parseFloat($('inV').value);
+  if(isNaN(i)||isNaN(v)){$('measMsg').innerHTML='<div class="mist">Enter both readings.</div>';return}
+  let h='';
+  if(Math.abs(i-I_OK)/I_OK<=0.05){score.i=15;h+='<div class="okmsg">Current ✔</div>'}
+  else{addMist('i','meas',15,`Loop current recorded ${i} mA; correct is ${I_OK.toFixed(2)} mA (12V ÷ 650Ω)`);h+=`<div class="mist">Current wrong — expected ${I_OK.toFixed(2)} mA (V ÷ total R).</div>`}
+  if(Math.abs(v-V2_OK)/V2_OK<=0.05){score.v=15;h+='<div class="okmsg">Voltage ✔</div>'}
+  else{addMist('v','meas',15,`V across R2 recorded ${v} V; correct is ${V2_OK.toFixed(2)} V (I × 220Ω)`);h+=`<div class="mist">Voltage wrong — expected ${V2_OK.toFixed(2)} V.</div>`}
+  $('measMsg').innerHTML=h;$('cMeas').classList.add('locked');$('cFault').classList.remove('locked');phase='fault';
+  const opts=['0 V','4.06 V','12 V','6 V'];
+  $('fopts').innerHTML=opts.map((o,k)=>`<button class="opt" data-k="${k}">${o}</button>`).join('');
+  $('fopts').querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    if(b.dataset.k==='2')score.f=10;else addMist('f','meas',10,'Open R2 in series: no current flows, so the full 12V appears across the open R2');
+    finish(false);
+  });
+};
+function finish(timeout){
+  clearInterval(tick);
+  if(timeout)addMist('time','meas',0,'Time ran out before the task was completed');
+  const b=builtOk?score.build:0,s=builtOk?score.safety:0,m=score.i+score.v+score.f;
+  // if timed out, measurement only counts what was recorded
+  const tot=b+s+(phase==='build'||phase==='safety'?0:m);
+  ['cSafe','cBoard','cMeas','cFault'].forEach(i=>$(i).classList.add('locked'));
+  $('cRes').style.display='block';
+  $('total').textContent=tot+' / 100';
+  const u=LIMIT-timeLeft;$('tused').textContent='Time used: '+Math.floor(u/60)+'m '+u%60+'s'+(timeout?' (timed out)':'');
+  $('tbl').innerHTML=`<tr><th>Section</th><th>Marks</th></tr><tr><td>Build</td><td>${b} / 40</td></tr><tr><td>Safety</td><td>${s} / 20</td></tr><tr><td>Measurement &amp; analysis</td><td>${phase==='build'||phase==='safety'?0:m} / 40</td></tr>`;
+  const ms=Object.values(mist).filter(x=>x.pts>0||x.msg.startsWith('Time'));
+  $('mlog').innerHTML=ms.length?ms.map(x=>`<div class="mist">−${x.pts} · ${x.msg}</div>`).join(''):'<div class="okmsg">No mistakes. Clean run.</div>';
+  $('cRes').scrollIntoView({behavior:'smooth'});
+}
+$('bRetry').onclick=()=>{reset();window.scrollTo(0,0)};
+reset();
+</script></body></html>
