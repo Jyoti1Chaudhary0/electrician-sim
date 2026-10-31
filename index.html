@@ -35,6 +35,7 @@ svg{width:100%;height:auto;display:block;background:#0e1216;border-radius:6px;bo
 .okmsg{margin:6px 0;padding:8px 10px;border-left:3px solid var(--green);background:rgba(79,191,122,.08);font-size:.82rem}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
 input[type=number],select{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:10px;width:120px;font-size:.9rem}
+select{width:auto;min-width:190px;max-width:100%}
 .meter{font-size:1.5rem;color:var(--blue);margin:6px 0}
 .opt{display:block;width:100%;text-align:left;margin-bottom:6px}
 table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
@@ -47,6 +48,8 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px
 <div class="card" id="cStart">
 <h2>Task</h2>
 <p class="dim">Wire a series circuit using a 12V supply, R1 (100Ω), R2 (220Ω), R3 (330Ω). Then power on safely, measure loop current and the voltage across R2, and analyse the effect of an open resistor. You have 15 minutes. Marks: Build 40 · Safety and meter use 20 · Measurement 40.</p>
+<div class="dim" style="margin:8px 0"><label style="display:block;margin:6px 0"><input type="radio" name="mode" value="learn" checked> <b>Learning mode</b> · hints appear while you wire</label>
+<label style="display:block;margin:6px 0"><input type="radio" name="mode" value="exam"> <b>Exam mode</b> · no hints; mistakes are shown only in the result</label></div>
 <button class="pri" id="bStart">Start task</button>
 </div>
 
@@ -56,6 +59,7 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px
 <label><input type="checkbox" class="sf"> Supply switched OFF before making connections</label>
 <label><input type="checkbox" class="sf"> Multimeter set to correct range/function</label>
 <label><input type="checkbox" class="sf"> No loose or exposed live connections</label></div>
+<div id="sNote"></div>
 </div>
 
 <div class="card locked" id="cBoard">
@@ -73,6 +77,7 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px
 <div class="row"><label class="dim">Meter function<br><select id="fn"><option value="">— select —</option><option value="DCV">DC voltage (V⎓)</option><option value="ACV">AC voltage (V~)</option><option value="DCA">DC current (mA)</option><option value="OHM">Resistance (Ω)</option></select></label></div>
 <div class="row"><select id="probe"><option value="loop">Loop current</option><option value="R1">Across R1</option><option value="R2">Across R2</option><option value="R3">Across R3</option></select><button id="bMeas">Measure</button></div>
 <div class="meter mono" id="meter">—</div>
+<div class="dim" id="mstat"></div>
 <div class="row"><label class="dim">Current (mA)<br><input type="number" step="0.01" id="inI"></label><label class="dim">V across R2 (V)<br><input type="number" step="0.01" id="inV"></label></div>
 <div class="row"><button class="pri" id="bRec">Record readings</button></div>
 <div id="measMsg"></div>
@@ -80,7 +85,7 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:7px 4px
 
 <div class="card locked" id="cFault">
 <h2>4 · Fault analysis</h2>
-<p class="dim">R2 now develops an open circuit. What does the voltmeter across R2 read?</p>
+<p class="dim">R2 now develops an open circuit.</p><svg id="fsvg" viewBox="0 0 640 220"></svg><div class="meter mono" id="fcur">Loop current: 0.00 mA</div><p class="dim">What does the voltmeter across R2 read?</p>
 <div id="fopts"></div>
 </div>
 
@@ -98,10 +103,10 @@ const PARTS=[{id:'supply',l:'12V Supply',ic:'🔋'},{id:'R1',l:'R1 100Ω',ic:'�
 const NODES=[{id:'F',x:80,y:50},{id:'A',x:80,y:170},{id:'B',x:400,y:170},{id:'C',x:400,y:50},{id:'D',x:560,y:170},{id:'E',x:560,y:50}];
 const I_OK=12/650*1000, V2_OK=12/650*220;
 const LIMIT=900;
-let builtOk,placed,sel,pick,mist,score,phase,timeLeft,tick,badNodes;
+let examMode=false,builtOk,placed,sel,pick,mist,score,phase,timeLeft,tick,badNodes,taken={};
 
 function reset(){
-  builtOk=false;placed={};sel=null;pick=null;mist={};badNodes=[];phase='start';timeLeft=LIMIT;
+  builtOk=false;taken={};placed={};sel=null;$('sNote').innerHTML='';$('mstat').innerHTML='';pick=null;mist={};badNodes=[];phase='start';timeLeft=LIMIT;
   score={build:40,safety:20,meas:40,i:0,v:0,f:0};
   clearInterval(tick);
   $('cStart').style.display='block';$('cRes').style.display='none';
@@ -113,15 +118,17 @@ function reset(){
 }
 function showTimer(){const m=Math.floor(timeLeft/60),s=timeLeft%60;$('timer').textContent=m+':'+String(s).padStart(2,'0');$('timer').className='mono'+(timeLeft<120?' low':'')}
 $('bStart').onclick=()=>{
-  $('cStart').style.display='none';$('cSafe').classList.remove('locked');phase='safety';
+  examMode=document.querySelector('input[name=mode]:checked').value==='exam';$('cStart').style.display='none';$('cSafe').classList.remove('locked');phase='safety';
   tick=setInterval(()=>{timeLeft--;showTimer();if(timeLeft<=0){clearInterval(tick);finish(true)}},1000);
 };
 document.querySelectorAll('.sf').forEach(c=>c.onchange=()=>{
-  if([...document.querySelectorAll('.sf')].every(x=>x.checked)&&phase==='safety'){phase='build';$('cBoard').classList.remove('locked')}
+  const all=[...document.querySelectorAll('.sf')].every(x=>x.checked);
+  if(all&&phase==='safety'){phase='build';$('cBoard').classList.remove('locked');$('sNote').innerHTML=''}
+  else if(!all&&phase==='build'){phase='safety';$('cBoard').classList.add('locked');sel=null;pick=null;renderTray();draw();hint();$('sNote').innerHTML='<div class="mist">Safety check incomplete. Tick every item again to continue. The timer keeps running.</div>'}
 });
 
-function addMist(code,cat,pts,msg){
-  if(mist[code])return;mist[code]={cat,pts,msg};score[cat]=Math.max(0,score[cat]-pts);
+function addMist(code,cat,pts,msg,short){
+  if(mist[code])return;mist[code]={cat,pts,msg,short};score[cat]=Math.max(0,score[cat]-pts);
 }
 function renderTray(){
   $('tray').innerHTML=PARTS.map(p=>`<div class="ti ${sel===p.id?'sel':''} ${placed[p.id]?'pl':''}" data-p="${p.id}"><span class="ic">${p.ic}</span>${p.l}</div>`).join('');
@@ -183,8 +190,9 @@ function analyse(){
 }
 function after(){
   const r=analyse();badNodes=[];let html='';
-  r.par.forEach(p=>{html+=`<div class="mist">${p[0]} and ${p[1]} are wired across the same two terminals — that is a parallel connection, not series.</div>`;addMist('par','build',15,'Parallel connection made where series was required')});
-  (r.par.length?[]:r.junc).forEach(n=>{badNodes.push(n);html+=`<div class="mist">Terminal ${n} has more than two leads — that is a junction (parallel), not a series joint.</div>`;addMist('junc','build',15,'Three or more leads joined at one terminal')});
+  if(examMode){$('live').innerHTML='';$('bPower').disabled=Object.keys(placed).length<4;renderTray();draw();hint();return}
+  r.par.forEach(p=>{html+=`<div class="mist">${p[0]} and ${p[1]} are wired across the same two terminals — that is a parallel connection, not series.</div>`});
+  (r.par.length?[]:r.junc).forEach(n=>{badNodes.push(n);html+=`<div class="mist">Terminal ${n} has more than two leads — that is a junction (parallel), not a series joint.</div>`});
   if(Object.keys(placed).length===4){
     if(r.dang.length){r.dang.forEach(n=>badNodes.push(n));html+=`<div class="mist">Terminal ${r.dang.join(', ')} has only one lead — open circuit, no current path.</div>`}
     if(r.ok)html+=`<div class="okmsg">✔ Correct series loop: supply, R1, R2, R3 in one closed path.</div>`;
@@ -198,55 +206,84 @@ $('bClear').onclick=()=>{placed={};sel=null;pick=null;after()};
 $('bPower').onclick=()=>{
   const r=analyse();
   if(!r.ok){
-    addMist('unsafe','safety',10,'Powered on a circuit that was not a complete, correct series loop');
-    if(r.dang.length)addMist('open','build',10,'Left a dangling terminal (open circuit)');
-    $('live').innerHTML+=`<div class="mist">⚠ Safety error: you energised an incorrect circuit. Fix the wiring before switching ON.</div>`;
+    addMist('unsafe','safety',10,'Powered on a circuit that was not a complete, correct series loop','Powered on an incorrect circuit');
+    $('live').innerHTML+=examMode?`<div class="mist">⚠ Supply protection tripped. Recheck your circuit.</div>`:`<div class="mist">⚠ Safety error: you energised an incorrect circuit. Fix the wiring before switching ON.</div>`;
     return;
   }
-  builtOk=true;phase='measure';$('cBoard').classList.add('locked');$('cMeas').classList.remove('locked');
+  builtOk=true;phase='measure';$('cBoard').classList.add('locked');$('cSafe').classList.add('locked');$('cMeas').classList.remove('locked');mstat();
 };
+function mstat(){$('mstat').innerHTML='Readings taken with the meter: Loop current '+(taken.loop?'✔':'○ not yet')+' · Voltage across R2 '+(taken.R2?'✔':'○ not yet')}
 $('bMeas').onclick=()=>{
   const p=$('probe').value,fn=$('fn').value,m=$('meter');
   const val=p==='loop'?I_OK.toFixed(2)+' mA':(12/650*({R1:100,R2:220,R3:330}[p])).toFixed(2)+' V';
   let msg='';
   if(!fn){m.textContent='Select a meter function first';return}
   const need=p==='loop'?'DCA':'DCV';
-  if(fn===need){m.textContent=val;return}
-  if(fn==='ACV'){m.textContent='0.00 V';msg='The supply is DC. AC mode reads zero.';addMist('ac','safety',5,'Meter left on AC voltage for a DC supply')}
-  else if(fn==='OHM'){m.textContent='ERR';msg='Never use resistance mode on a live circuit; it can damage the meter.';addMist('ohm','safety',10,'Used resistance mode on a live circuit')}
-  else if(fn==='DCA'){m.textContent='ERR';msg='Current mode across a component acts like a short circuit. Use voltage mode across parts; current mode goes in series.';addMist('amp','safety',10,'Connected the ammeter (current mode) across a component')}
-  else if(fn==='DCV'){m.textContent='0.00 mA';msg='A voltmeter goes across a component, not in the loop. To read current, use DC current mode in series.';addMist('vs','safety',5,'Used voltage mode to measure loop current')}
-  $('measMsg').innerHTML='<div class="mist">'+msg+'</div>';
+  if(fn===need){m.textContent=val;if(p==='loop'||p==='R2'){taken[p]=true;mstat()}return}
+  if(fn==='ACV'){m.textContent='0.00 V';msg='The supply is DC. AC mode reads zero.';addMist('ac','safety',5,'Meter left on AC voltage for a DC supply','Wrong meter function selected')}
+  else if(fn==='OHM'){m.textContent='ERR';msg='Never use resistance mode on a live circuit; it can damage the meter.';addMist('ohm','safety',10,'Used resistance mode on a live circuit','Wrong meter function selected')}
+  else if(fn==='DCA'){m.textContent='ERR';msg='Current mode across a component acts like a short circuit. Use voltage mode across parts; current mode goes in series.';addMist('amp','safety',10,'Connected the ammeter (current mode) across a component','Wrong meter function selected')}
+  else if(fn==='DCV'){m.textContent='0.00 mA';msg='A voltmeter goes across a component, not in the loop. To read current, use DC current mode in series.';addMist('vs','safety',5,'Used voltage mode to measure loop current','Wrong meter function selected')}
+  $('measMsg').innerHTML=examMode?'':'<div class="mist">'+msg+'</div>';
 };
 $('bRec').onclick=()=>{
   const i=parseFloat($('inI').value),v=parseFloat($('inV').value);
   if(isNaN(i)||isNaN(v)){$('measMsg').innerHTML='<div class="mist">Enter both readings.</div>';return}
+  if(!taken.loop||!taken.R2){const miss=[];if(!taken.loop)miss.push('loop current');if(!taken.R2)miss.push('voltage across R2');let t='Not recorded yet: you have not measured the '+miss.join(' and ')+' with the meter.';if(!examMode){if(!taken.loop)t+=' For loop current: set Meter function to DC current (mA), pick “Loop current”, press Measure.';if(!taken.R2)t+=' For R2 voltage: set Meter function to DC voltage, pick “Across R2”, press Measure.'}$('measMsg').innerHTML='<div class="mist">'+t+'</div>';mstat();return}
   let h='';
-  if(Math.abs(i-I_OK)/I_OK<=0.05){score.i=15;h+='<div class="okmsg">Current ✔</div>'}
-  else{addMist('i','meas',15,`Loop current recorded ${i} mA; correct is ${I_OK.toFixed(2)} mA (12V ÷ 650Ω)`);h+=`<div class="mist">Current wrong — expected ${I_OK.toFixed(2)} mA (V ÷ total R).</div>`}
-  if(Math.abs(v-V2_OK)/V2_OK<=0.05){score.v=15;h+='<div class="okmsg">Voltage ✔</div>'}
-  else{addMist('v','meas',15,`V across R2 recorded ${v} V; correct is ${V2_OK.toFixed(2)} V (I × 220Ω)`);h+=`<div class="mist">Voltage wrong — expected ${V2_OK.toFixed(2)} V.</div>`}
-  $('measMsg').innerHTML=h;$('cMeas').classList.add('locked');$('cFault').classList.remove('locked');phase='fault';
+  if(Math.abs(i-I_OK)/I_OK<=0.05){score.i=15;h+=examMode?'':'<div class="okmsg">Current ✔</div>'}
+  else{addMist('i','meas',15,'Loop current reading was wrong. Hint: current = supply voltage ÷ total resistance','Loop current reading incorrect');h+=examMode?'':'<div class="mist">Current reading is off. Check: current = supply voltage ÷ total resistance.</div>'}
+  if(Math.abs(v-V2_OK)/V2_OK<=0.05){score.v=15;h+=examMode?'':'<div class="okmsg">Voltage ✔</div>'}
+  else{addMist('v','meas',15,'Voltage across R2 was wrong. Hint: voltage across a resistor = current × its resistance','Voltage reading incorrect');h+=examMode?'':'<div class="mist">Voltage reading is off. Check: voltage across a resistor = current × its resistance.</div>'}
+  $('measMsg').innerHTML=examMode?'<div class="okmsg">Readings recorded.</div>':h;$('cMeas').classList.add('locked');$('cFault').classList.remove('locked');phase='fault';
+  drawFault();
   const opts=['0 V','4.06 V','12 V','6 V'];
   $('fopts').innerHTML=opts.map((o,k)=>`<button class="opt" data-k="${k}">${o}</button>`).join('');
   $('fopts').querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
-    if(b.dataset.k==='2')score.f=10;else addMist('f','meas',10,'Open R2 in series: no current flows, so the full 12V appears across the open R2');
+    if(b.dataset.k==='2')score.f=10;else addMist('f','meas',10,'Open R2 in series: no current flows, so the full supply voltage appears across the open R2','Fault question answered incorrectly');
     finish(false);
   });
 };
+function drawFault(){
+  let h='<rect x="8" y="8" width="624" height="204" rx="8" fill="none" stroke="#2c343c"/>';
+  Object.entries(placed).forEach(([p,t])=>{
+    const a=NODES.find(n=>n.id===t.a),b=NODES.find(n=>n.id===t.b);
+    const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),ux=dx/len,uy=dy/len;
+    const lab=p==='supply'?'12V':p;
+    if(p==='R2'){
+      const g=26;
+      h+=`<line class="cl" x1="${a.x}" y1="${a.y}" x2="${mx-ux*g}" y2="${my-uy*g}" style="stroke:#e15a4d"/><line class="cl" x1="${mx+ux*g}" y1="${my+uy*g}" x2="${b.x}" y2="${b.y}" style="stroke:#e15a4d"/><text x="${mx+(uy?18:0)}" y="${my+(uy?4:-16)}" fill="#e15a4d" font-size="14" text-anchor="${uy?'start':'middle'}" font-family="monospace">R2 OPEN</text>`;
+    } else {
+      h+=`<line class="cl ${p==='supply'?'sup':''}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><text x="${mx+(uy?18:0)}" y="${my+(uy?4:-14)}" fill="#ecf0f3" font-size="14" text-anchor="${uy?'start':'middle'}" font-family="monospace">${lab}</text>`;
+    }
+  });
+  NODES.forEach(n=>{h+=`<circle cx="${n.x}" cy="${n.y}" r="10" fill="${Object.values(placed).some(t=>t.a===n.id||t.b===n.id)?'#4fbf7a':'#556'}"/>`});
+  $('fsvg').innerHTML=h;
+}
+function evalBuild(){
+  delete mist.par; delete mist.junc; delete mist.open;
+  const r=analyse();
+  if(Object.keys(placed).length<4){score.build=0;return}
+  score.build=40;
+  if(r.par.length){score.build-=15;mist.par={cat:'build',pts:15,msg:`${r.par[0][0]} and ${r.par[0][1]} are wired across the same two terminals — that is a parallel connection, not series.`,short:'Wrong connection: not a series circuit'}}
+  else if(r.junc.length){score.build-=15;mist.junc={cat:'build',pts:15,msg:`Terminal ${r.junc.join(', ')} has more than two leads — that is a junction (parallel), not a series joint.`,short:'Wrong connection: not a series circuit'}}
+  if(r.dang.length){score.build-=10;mist.open={cat:'build',pts:10,msg:`Terminal ${r.dang.join(', ')} has only one lead — open circuit, no current path.`,short:'Incomplete circuit'}}
+  score.build=Math.max(0,score.build);
+}
 function finish(timeout){
   clearInterval(tick);
   if(timeout)addMist('time','meas',0,'Time ran out before the task was completed');
-  const b=builtOk?score.build:0,s=builtOk?score.safety:0,m=score.i+score.v+score.f;
+  evalBuild();
+  const b=score.build,s=score.safety,m=score.i+score.v+score.f;
   // if timed out, measurement only counts what was recorded
   const tot=b+s+(phase==='build'||phase==='safety'?0:m);
   ['cSafe','cBoard','cMeas','cFault'].forEach(i=>$(i).classList.add('locked'));
   $('cRes').style.display='block';
   $('total').textContent=tot+' / 100';
-  const u=LIMIT-timeLeft;$('tused').textContent='Time used: '+Math.floor(u/60)+'m '+u%60+'s'+(timeout?' (timed out)':'');
+  const u=LIMIT-timeLeft;$('tused').textContent=(examMode?'Exam mode · ':'Learning mode · ')+'Time used: '+Math.floor(u/60)+'m '+u%60+'s'+(timeout?' (timed out)':'');
   $('tbl').innerHTML=`<tr><th>Section</th><th>Marks</th></tr><tr><td>Build</td><td>${b} / 40</td></tr><tr><td>Safety</td><td>${s} / 20</td></tr><tr><td>Measurement &amp; analysis</td><td>${phase==='build'||phase==='safety'?0:m} / 40</td></tr>`;
   const ms=Object.values(mist).filter(x=>x.pts>0||x.msg.startsWith('Time'));
-  $('mlog').innerHTML=ms.length?ms.map(x=>`<div class="mist">−${x.pts} · ${x.msg}</div>`).join(''):'<div class="okmsg">No mistakes. Clean run.</div>';
+  $('mlog').innerHTML=ms.length?ms.map(x=>`<div class="mist">−${x.pts} · ${examMode&&x.short?x.short:x.msg}</div>`).join(''):'<div class="okmsg">No mistakes. Clean run.</div>';
   $('cRes').scrollIntoView({behavior:'smooth'});
 }
 $('bRetry').onclick=()=>{reset();window.scrollTo(0,0)};
